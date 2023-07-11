@@ -36,6 +36,7 @@ setInitialGitHubToNotionIdMap().then(syncNotionDatabaseWithGitHub);
  */
 async function setInitialGitHubToNotionIdMap() {
   const currentIssues = await getIssuesFromNotionDatabase();
+  // console.log("current issues", currentIssues);
   for (const { pageId, issueNumber } of currentIssues) {
     gitHubIssuesIdToNotionPageId[issueNumber] = pageId;
   }
@@ -117,15 +118,17 @@ async function getGitHubIssuesForRepository() {
   });
   for await (const { data } of iterator) {
     for (const issue of data) {
+      // console.log('#######')
+      // console.log('issue', issue)
       if (!issue.pull_request) {
-        console.log("issues new array", issues);
+        // console.log("issues new array", issues);
         issues.push({
           number: issue.number,
           title: issue.title,
           state: issue.state,
           comment_count: issue.comments,
           url: issue.html_url,
-          label: issue.labels.map((label) => label.name).join(", "),
+          labels: issue.labels,
         });
       }
     }
@@ -212,9 +215,14 @@ async function updatePages(pagesToUpdate) {
  *
  * @param {{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, label: string }} issue
  */
-function getPropertiesFromIssue(issue) {
-  console.log("properties available", issue);
-  const { title, number, state, comment_count, url, label } = issue;
+async function getPropertiesFromIssue(issue) {
+  // console.log("properties available", issue);
+  const { title, number, state, comment_count, url, labels } = issue;
+
+
+  const lastCommentAuthor = issue.comment_count > 0 ? getLastCommentAuthor(issue.number) : "";
+  console.log('lastCommentAuthor', await lastCommentAuthor)
+
   return {
     Name: {
       title: [{ type: "text", text: { content: title } }],
@@ -231,8 +239,30 @@ function getPropertiesFromIssue(issue) {
     "Issue URL": {
       url,
     },
-    "Label": {
-        rich_text: [{ type: "text", text: { content: label } }]// Map labels to rich text array
+    "Labels": {
+      multi_select: labels.map((label) => ({ name: label.name })),
     },
   };
+}
+
+async function getCommentsForIssue(issueNumber) {
+  const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
+    owner: process.env.GITHUB_REPO_OWNER,
+    repo: process.env.GITHUB_REPO_NAME,
+    issue_number: issueNumber,
+  });
+
+  const comments = [];
+
+  for await (const { data } of iterator) {
+    comments.push(...data);
+  }
+
+  return comments;
+}
+
+async function getLastCommentAuthor(issueNumber) {
+  const comments = await getCommentsForIssue(issueNumber);
+  // return the user name of the last comment
+  return comments.length > 0 ? comments[comments.length - 1].user.login : "";
 }
