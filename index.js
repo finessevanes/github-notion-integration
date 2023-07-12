@@ -105,7 +105,7 @@ async function getIssuesFromNotionDatabase() {
  * https://docs.github.com/en/rest/guides/traversing-with-pagination
  * https://docs.github.com/en/rest/reference/issues
  *
- * @returns {Promise<Array<{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string }>>}
+ * @returns {Promise<Array<{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, follow_up: boolean }>>}
  */
 async function getGitHubIssuesForRepository() {
   const issues = [];
@@ -118,6 +118,23 @@ async function getGitHubIssuesForRepository() {
   for await (const { data } of iterator) {
     for (const issue of data) {
       if (!issue.pull_request) {
+        const comments = await octokit.rest.issues.listComments({
+          owner: process.env.GITHUB_REPO_OWNER,
+          repo: process.env.GITHUB_REPO_NAME,
+          issue_number: issue.number,
+          per_page: 1, // We only need the last comment
+          direction: 'desc' // Ensure the last comment is first
+        });
+        let follow_up = false; // Default to false
+        if (comments.data.length === 0) { // If no comments, set follow_up to true
+          follow_up = true;
+        } else { // If there are comments
+          const lastComment = comments.data[0];
+
+          if (lastComment.author_association !== "COLLABORATOR" || lastComment.author_association !== "OWNER" || lastComment.author_association !== "MEMBER") {
+            follow_up = true;
+          }
+        }
         issues.push({
           number: issue.number,
           title: issue.title,
@@ -125,13 +142,16 @@ async function getGitHubIssuesForRepository() {
           comment_count: issue.comments,
           url: issue.html_url,
           labels: issue.labels,
+          follow_up: follow_up
         });
-        console.log(`Issue number: ${issue.number}, title: ${issue.title}, state: ${issue.state}, labels: ${issue.labels.map((label) => label.name)}`);
+        console.log('GET GITHUB ISSUES FOR REPOSITORY')
+        console.log(`Issue number: ${issue.number}, title: ${issue.title}, state: ${issue.state}, labels: ${issue.labels.map((label) => label.name)}, follow up: ${follow_up}`);
       }
     }
   }
   return issues;
 }
+
 
 /**
  * Determines which issues already exist in the Notion database.
@@ -213,7 +233,9 @@ async function updatePages(pagesToUpdate) {
  * @param {{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, labels: string }} issue
  */
 function getPropertiesFromIssue(issue) {
-  const { title, number, state, comment_count, url, labels } = issue;
+  const { title, number, state, comment_count, url, labels, follow_up } = issue;
+  console.log('GET PROPERTIES FROM ISSUE')
+  console.log(`Issue number: ${number}, title: ${title}, state: ${state}, labels: ${labels.map((label) => label.name)}, follow_up: ${follow_up}, comment_count: ${comment_count}`);
   return {
     Name: {
       title: [{ type: "text", text: { content: title } }],
@@ -233,5 +255,30 @@ function getPropertiesFromIssue(issue) {
     "Labels": {
       multi_select: labels.map((label) => ({ name: label.name })),
     },
+    "Follow Up": {
+      select: { name: follow_up ? 'true' : 'false' },
+    },
   };
+}
+
+/**
+ * Gets the collaborators from a GitHub repository.
+ *
+ * https://docs.github.com/en/rest/reference/repos#list-repository-collaborators
+ *
+ * @returns {Promise<Set<string>>}
+ */
+async function getGitHubCollaborators() {
+  const collaborators = new Set();
+  const iterator = octokit.paginate.iterator(octokit.rest.repos.listCollaborators, {
+    owner: process.env.GITHUB_REPO_OWNER,
+    repo: process.env.GITHUB_REPO_NAME,
+    per_page: 100,
+  });
+  for await (const { data } of iterator) {
+    for (const collaborator of data) {
+      collaborators.add(collaborator.login);
+    }
+  }
+  return collaborators;
 }
