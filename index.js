@@ -122,24 +122,31 @@ async function getGitHubIssuesForRepository() {
           owner: process.env.GITHUB_REPO_OWNER,
           repo: process.env.GITHUB_REPO_NAME,
           issue_number: issue.number,
-          per_page: 1, // We only need the last comment
-          direction: 'desc' // Ensure the last comment
+          direction: 'asc' // Sort so the last comment is first
         });
-        let follow_up = false; // Default to false
         const assignee = issue.assignee ? issue.assignee.login : 'None';
+
+        for (const comment of comments.data) {
+          console.log(`Issue: ${issue.number}`);
+          console.log(`Comment author: ${comment.user.login}`);
+          console.log(`Comment created at: ${comment.created_at}`);
+          console.log(`Author association: ${comment.author_association}`);
+          console.log('---------------------------------');
+        }
+
+        // Determine if follow-up is needed based on the author_association of the last comment
+        let follow_up = false; // Default to false
         if (comments.data.length === 0) { // If no comments, set follow_up to true
           follow_up = true;
-        } else { // If there are comments
-          const lastComment = comments.data[0];
-          console.log('#############################################')
-          console.log(`issue: ${issue.number}: author_association: ${lastComment.author_association}, last comment by: ${lastComment.user.login}`)
-          console.log('#############################################')
-
-
+        } else {
+          const lastComment = comments.data[0]; 
           if (lastComment.author_association === "COLLABORATOR" || lastComment.author_association === "OWNER" || lastComment.author_association === "MEMBER") {
             follow_up = false;
+          } else {
+            follow_up = true;
           }
         }
+
         issues.push({
           number: issue.number,
           title: issue.title,
@@ -155,6 +162,7 @@ async function getGitHubIssuesForRepository() {
   }
   return issues;
 }
+
 
 
 /**
@@ -266,26 +274,4 @@ function getPropertiesFromIssue(issue) {
       rich_text: [{ type: "text", text: { content: assignee } }],
     },
   };
-}
-
-/**
- * Gets the collaborators from a GitHub repository.
- *
- * https://docs.github.com/en/rest/reference/repos#list-repository-collaborators
- *
- * @returns {Promise<Set<string>>}
- */
-async function getGitHubCollaborators() {
-  const collaborators = new Set();
-  const iterator = octokit.paginate.iterator(octokit.rest.repos.listCollaborators, {
-    owner: process.env.GITHUB_REPO_OWNER,
-    repo: process.env.GITHUB_REPO_NAME,
-    per_page: 100,
-  });
-  for await (const { data } of iterator) {
-    for (const collaborator of data) {
-      collaborators.add(collaborator.login);
-    }
-  }
-  return collaborators;
 }
