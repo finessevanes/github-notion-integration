@@ -36,7 +36,6 @@ setInitialGitHubToNotionIdMap().then(syncNotionDatabaseWithGitHub);
  */
 async function setInitialGitHubToNotionIdMap() {
   const currentIssues = await getIssuesFromNotionDatabase();
-  // console.log("current issues", currentIssues);
   for (const { pageId, issueNumber } of currentIssues) {
     gitHubIssuesIdToNotionPageId[issueNumber] = pageId;
   }
@@ -113,15 +112,12 @@ async function getGitHubIssuesForRepository() {
   const iterator = octokit.paginate.iterator(octokit.rest.issues.listForRepo, {
     owner: process.env.GITHUB_REPO_OWNER,
     repo: process.env.GITHUB_REPO_NAME,
-    state: "all",
+    state: "open",
     per_page: 100,
   });
   for await (const { data } of iterator) {
     for (const issue of data) {
-      // console.log('#######')
-      // console.log('issue', issue)
       if (!issue.pull_request) {
-        // console.log("issues new array", issues);
         issues.push({
           number: issue.number,
           title: issue.title,
@@ -130,6 +126,7 @@ async function getGitHubIssuesForRepository() {
           url: issue.html_url,
           labels: issue.labels,
         });
+        console.log(`Issue number: ${issue.number}, title: ${issue.title}, state: ${issue.state}, labels: ${issue.labels.map((label) => label.name)}`);
       }
     }
   }
@@ -213,16 +210,10 @@ async function updatePages(pagesToUpdate) {
 /**
  * Returns the GitHub issue to conform to this database's schema properties.
  *
- * @param {{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, label: string }} issue
+ * @param {{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, labels: string }} issue
  */
-async function getPropertiesFromIssue(issue) {
-  // console.log("properties available", issue);
+function getPropertiesFromIssue(issue) {
   const { title, number, state, comment_count, url, labels } = issue;
-
-
-  const lastCommentAuthor = issue.comment_count > 0 ? getLastCommentAuthor(issue.number) : "";
-  console.log('lastCommentAuthor', await lastCommentAuthor)
-
   return {
     Name: {
       title: [{ type: "text", text: { content: title } }],
@@ -243,26 +234,4 @@ async function getPropertiesFromIssue(issue) {
       multi_select: labels.map((label) => ({ name: label.name })),
     },
   };
-}
-
-async function getCommentsForIssue(issueNumber) {
-  const iterator = octokit.paginate.iterator(octokit.rest.issues.listComments, {
-    owner: process.env.GITHUB_REPO_OWNER,
-    repo: process.env.GITHUB_REPO_NAME,
-    issue_number: issueNumber,
-  });
-
-  const comments = [];
-
-  for await (const { data } of iterator) {
-    comments.push(...data);
-  }
-
-  return comments;
-}
-
-async function getLastCommentAuthor(issueNumber) {
-  const comments = await getCommentsForIssue(issueNumber);
-  // return the user name of the last comment
-  return comments.length > 0 ? comments[comments.length - 1].user.login : "";
 }
