@@ -123,16 +123,21 @@ async function getGitHubIssuesForRepository() {
           repo: process.env.GITHUB_REPO_NAME,
           issue_number: issue.number,
           per_page: 1, // We only need the last comment
-          direction: 'desc' // Ensure the last comment is first
+          direction: 'desc' // Ensure the last comment
         });
         let follow_up = false; // Default to false
+        const assignee = issue.assignee ? issue.assignee.login : 'None';
         if (comments.data.length === 0) { // If no comments, set follow_up to true
           follow_up = true;
         } else { // If there are comments
           const lastComment = comments.data[0];
+          console.log('#############################################')
+          console.log(`issue: ${issue.number}: author_association: ${lastComment.author_association}, last comment by: ${lastComment.user.login}`)
+          console.log('#############################################')
 
-          if (lastComment.author_association !== "COLLABORATOR" || lastComment.author_association !== "OWNER" || lastComment.author_association !== "MEMBER") {
-            follow_up = true;
+
+          if (lastComment.author_association === "COLLABORATOR" || lastComment.author_association === "OWNER" || lastComment.author_association === "MEMBER") {
+            follow_up = false;
           }
         }
         issues.push({
@@ -142,10 +147,9 @@ async function getGitHubIssuesForRepository() {
           comment_count: issue.comments,
           url: issue.html_url,
           labels: issue.labels,
-          follow_up: follow_up
+          follow_up: follow_up,
+          assignee: assignee
         });
-        console.log('GET GITHUB ISSUES FOR REPOSITORY')
-        console.log(`Issue number: ${issue.number}, title: ${issue.title}, state: ${issue.state}, labels: ${issue.labels.map((label) => label.name)}, follow up: ${follow_up}`);
       }
     }
   }
@@ -233,9 +237,9 @@ async function updatePages(pagesToUpdate) {
  * @param {{ number: number, title: string, state: "open" | "closed", comment_count: number, url: string, labels: string }} issue
  */
 function getPropertiesFromIssue(issue) {
-  const { title, number, state, comment_count, url, labels, follow_up } = issue;
+  const { title, number, state, comment_count, url, labels, follow_up, assignee } = issue;
   console.log('GET PROPERTIES FROM ISSUE')
-  console.log(`Issue number: ${number}, title: ${title}, state: ${state}, labels: ${labels.map((label) => label.name)}, follow_up: ${follow_up}, comment_count: ${comment_count}`);
+  console.log(`Issue number: ${number}, follow_up: ${follow_up}`);
   return {
     Name: {
       title: [{ type: "text", text: { content: title } }],
@@ -257,6 +261,9 @@ function getPropertiesFromIssue(issue) {
     },
     "Follow Up": {
       select: { name: follow_up ? 'true' : 'false' },
+    },
+    "Assignee": {
+      rich_text: [{ type: "text", text: { content: assignee } }],
     },
   };
 }
