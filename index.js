@@ -122,24 +122,14 @@ async function getGitHubIssuesForRepository() {
           owner: process.env.GITHUB_REPO_OWNER,
           repo: process.env.GITHUB_REPO_NAME,
           issue_number: issue.number,
-          direction: 'asc' // Sort so the last comment is first
+          direction: 'asc'
         });
         const assignee = issue.assignee ? issue.assignee.login : 'None';
-
-        for (const comment of comments.data) {
-          console.log(`Issue: ${issue.number}`);
-          console.log(`Comment author: ${comment.user.login}`);
-          console.log(`Comment created at: ${comment.created_at}`);
-          console.log(`Author association: ${comment.author_association}`);
-          console.log('---------------------------------');
-        }
-
-        // Determine if follow-up is needed based on the author_association of the last comment
         let follow_up = false; // Default to false
         if (comments.data.length === 0) { // If no comments, set follow_up to true
           follow_up = true;
         } else {
-          const lastComment = comments.data[0]; 
+          const lastComment = comments.data[comments.data.length - 1]; 
           if (lastComment.author_association === "COLLABORATOR" || lastComment.author_association === "OWNER" || lastComment.author_association === "MEMBER") {
             follow_up = false;
           } else {
@@ -246,8 +236,6 @@ async function updatePages(pagesToUpdate) {
  */
 function getPropertiesFromIssue(issue) {
   const { title, number, state, comment_count, url, labels, follow_up, assignee } = issue;
-  console.log('GET PROPERTIES FROM ISSUE')
-  console.log(`Issue number: ${number}, follow_up: ${follow_up}`);
   return {
     Name: {
       title: [{ type: "text", text: { content: title } }],
